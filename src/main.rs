@@ -46,7 +46,6 @@ fn main() {
         .unwrap();
     let tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))
-        .with_tooltip("test")
         .build()
         .unwrap();
     let event_loop = EventLoopBuilder::with_user_event().build();
