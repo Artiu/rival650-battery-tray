@@ -1,11 +1,20 @@
 #![windows_subsystem = "windows"]
 
-use std::{io::Cursor, thread::sleep, time::Duration};
+use std::{
+    io::Cursor,
+    process::exit,
+    thread::{self, sleep},
+    time::Duration,
+};
 
 use hidapi::{DeviceInfo, HidApi};
 use image::io::Reader;
 use include_dir::{include_dir, Dir};
-use tray_icon::{Icon, TrayIconBuilder};
+use tao::event_loop::{ControlFlow, EventLoopBuilder};
+use tray_icon::{
+    menu::{Menu, MenuEvent, MenuItem},
+    Icon, TrayIconBuilder,
+};
 
 fn get_rival650(api: &HidApi) -> Option<&DeviceInfo> {
     let wired_rival650 = api
@@ -31,8 +40,18 @@ fn get_rival650_battery() -> Option<u8> {
 
 fn main() {
     static ICONS: Dir = include_dir!("icons");
-    let tray_icon = TrayIconBuilder::new().build().unwrap();
-    loop {
+    let tray_menu = Menu::new();
+    tray_menu
+        .append(&MenuItem::with_id("quit", "Quit", true, None))
+        .unwrap();
+    let tray_icon = TrayIconBuilder::new()
+        .with_menu(Box::new(tray_menu))
+        .with_tooltip("test")
+        .build()
+        .unwrap();
+    let event_loop = EventLoopBuilder::with_user_event().build();
+    let proxy = event_loop.create_proxy();
+    thread::spawn(move || loop {
         let battery = get_rival650_battery();
         let battery_text = match battery {
             Some(battery) => format!("Rival 650 battery level is {}%", battery),
@@ -51,8 +70,21 @@ fn main() {
         .to_rgba8()
         .to_vec();
         let icon = Icon::from_rgba(image, 16, 16).unwrap();
-        tray_icon.set_icon(Some(icon)).unwrap();
-        tray_icon.set_tooltip(Some(battery_text)).unwrap();
+        proxy.send_event((icon, battery_text)).unwrap();
         sleep(Duration::from_secs(60));
-    }
+    });
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Wait;
+
+        if let tao::event::Event::UserEvent((icon, text)) = event {
+            tray_icon.set_icon(Some(icon)).unwrap();
+            tray_icon.set_tooltip(Some(text)).unwrap();
+        }
+
+        if let Ok(event) = MenuEvent::receiver().try_recv() {
+            if event.id == "quit" {
+                exit(0);
+            }
+        }
+    });
 }

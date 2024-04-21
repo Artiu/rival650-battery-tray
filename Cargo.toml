@@ -9,4 +9,5 @@ edition = "2021"
 hidapi = { version = "2.6.1", features = ["windows-native"] }
 image = "0.25.1"
 include_dir = "0.7.3"
+tao = "0.27.0"
 tray-icon = "0.13.4"
