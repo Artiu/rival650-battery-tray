@@ -45,6 +45,7 @@ fn main() {
         .append(&MenuItem::with_id("quit", "Quit", true, None))
         .unwrap();
     let tray_icon = TrayIconBuilder::new()
+        .with_tooltip("Rival 650 battery level is unknown")
         .with_menu(Box::new(tray_menu))
         .build()
         .unwrap();
