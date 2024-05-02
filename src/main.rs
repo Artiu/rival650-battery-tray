@@ -40,6 +40,13 @@ fn get_rival650_battery() -> Option<u8> {
     return Some(buf[0]);
 }
 
+fn get_battery_text(battery: Option<u8>) -> String {
+    return match battery {
+        Some(battery) => format!("Rival 650 battery level is {}%", battery),
+        None => "Rival 650 battery level is unknown".to_owned(),
+    };
+}
+
 fn get_icon(number: u8) -> Icon {
     let number = if number > 100 { 0 } else { number };
     let image = Reader::new(Cursor::new(
@@ -58,11 +65,14 @@ fn get_icon(number: u8) -> Icon {
 fn main() {
     let tray_menu = Menu::new();
     tray_menu
-        .append(&MenuItem::with_id("quit", "Quit", true, None))
+        .append_items(&[
+            &MenuItem::with_id("refresh", "Refresh", true, None),
+            &MenuItem::with_id("quit", "Quit", true, None),
+        ])
         .unwrap();
     let tray_icon = TrayIconBuilder::new()
         .with_icon(get_icon(0))
-        .with_tooltip("Rival 650 battery level is unknown")
+        .with_tooltip(get_battery_text(None))
         .with_menu(Box::new(tray_menu))
         .build()
         .unwrap();
@@ -70,10 +80,7 @@ fn main() {
     let proxy = event_loop.create_proxy();
     thread::spawn(move || loop {
         let battery = get_rival650_battery();
-        let battery_text = match battery {
-            Some(battery) => format!("Rival 650 battery level is {}%", battery),
-            None => "Rival 650 battery level is unknown".to_owned(),
-        };
+        let battery_text = get_battery_text(battery);
         proxy
             .send_event((get_icon(battery.unwrap_or(0)), battery_text))
             .unwrap();
@@ -85,9 +92,19 @@ fn main() {
         if let tao::event::Event::UserEvent((icon, text)) = event {
             tray_icon.set_icon(Some(icon)).unwrap();
             tray_icon.set_tooltip(Some(text)).unwrap();
+            return;
         }
 
         if let Ok(event) = MenuEvent::receiver().try_recv() {
+            if event.id == "refresh" {
+                let battery = get_rival650_battery();
+                let battery_text = get_battery_text(battery);
+                tray_icon
+                    .set_icon(Some(get_icon(battery.unwrap_or(0))))
+                    .unwrap();
+                tray_icon.set_tooltip(Some(battery_text)).unwrap();
+                return;
+            }
             if event.id == "quit" {
                 exit(0);
             }
