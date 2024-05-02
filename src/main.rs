@@ -16,6 +16,8 @@ use tray_icon::{
     Icon, TrayIconBuilder,
 };
 
+static ICONS: Dir = include_dir!("icons");
+
 fn get_rival650(api: &HidApi) -> Option<&DeviceInfo> {
     let wired_rival650 = api
         .device_list()
@@ -34,17 +36,32 @@ fn get_rival650_battery() -> Option<u8> {
     let opened_device = device.open_device(&api).ok()?;
     opened_device.write(&[0x00, 0xAA, 0x01]).ok()?;
     let mut buf = [0u8; 1];
-    opened_device.read(&mut buf).ok()?;
+    opened_device.read_timeout(&mut buf, 5000).ok()?;
     return Some(buf[0]);
 }
 
+fn get_icon(number: u8) -> Icon {
+    let number = if number > 100 { 0 } else { number };
+    let image = Reader::new(Cursor::new(
+        ICONS
+            .get_file(format!("{}.png", number))
+            .unwrap()
+            .contents(),
+    ))
+    .with_guessed_format()
+    .unwrap()
+    .decode()
+    .unwrap();
+    return Icon::from_rgba(image.to_rgba8().to_vec(), image.width(), image.height()).unwrap();
+}
+
 fn main() {
-    static ICONS: Dir = include_dir!("icons");
     let tray_menu = Menu::new();
     tray_menu
         .append(&MenuItem::with_id("quit", "Quit", true, None))
         .unwrap();
     let tray_icon = TrayIconBuilder::new()
+        .with_icon(get_icon(0))
         .with_tooltip("Rival 650 battery level is unknown")
         .with_menu(Box::new(tray_menu))
         .build()
@@ -57,20 +74,9 @@ fn main() {
             Some(battery) => format!("Rival 650 battery level is {}%", battery),
             None => "Rival 650 battery level is unknown".to_owned(),
         };
-        let image = Reader::new(Cursor::new(
-            ICONS
-                .get_file(format!("{}.png", battery.unwrap_or(0)))
-                .unwrap()
-                .contents(),
-        ))
-        .with_guessed_format()
-        .unwrap()
-        .decode()
-        .unwrap()
-        .to_rgba8()
-        .to_vec();
-        let icon = Icon::from_rgba(image, 16, 16).unwrap();
-        proxy.send_event((icon, battery_text)).unwrap();
+        proxy
+            .send_event((get_icon(battery.unwrap_or(0)), battery_text))
+            .unwrap();
         sleep(Duration::from_secs(60));
     });
     event_loop.run(move |event, _, control_flow| {
